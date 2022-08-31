@@ -86,19 +86,6 @@ def pick_random():
     return dataset_folder, resource_name, type_of
 
 
-# Choose random dataset
-def pick_dataset(type_of):
-    if type_of == "csv":
-        request = requests.get(api_url + 'package_search?fq=+"csv" +groups:"sail-project"', headers=header)
-    else:
-        request = requests.get(api_url + 'package_search?fq=+"gnss" +groups:"sail-project"', headers=header)
-    if request.json()["result"]["count"] != 0:
-
-        return request.json()["result"]["results"]
-    else:
-        return -1
-
-
 # MAIN FUNCTION #
 
 # Upload multiple datasets

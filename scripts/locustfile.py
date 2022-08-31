@@ -1,62 +1,43 @@
 import random
-import time
 from locust import HttpUser, task, between
 import ImportData
-import pprint
 import pathlib
 import os
 
 
 class QuickStartUser(HttpUser):
-    wait_time = between(1, 5)
+    # wait_time = between(1, 5)
 
-    @task
-    def get_csv_resource(self):
-        datasets = ImportData.pick_dataset("csv")
-        if datasets != -1:
-            index_dataset = random.randint(0, len(datasets) - 1)
-            resources = ImportData.get_resources(datasets[index_dataset]["resources"])
-            index_resource = random.randint(0, len(resources)-1)
-            self.client.get("/api/3/action/resource_show", json={'id': resources[index_resource]["id"]})
-    
-    @task
-    def get_txt_resource(self):
-        datasets = ImportData.pick_dataset("txt")
-        if datasets != -1:
-            index_dataset = random.randint(0, len(datasets) - 1)
-            resources = ImportData.get_resources(datasets[index_dataset]["resources"])
-            index_resource = random.randint(0, len(resources) - 1)
-            self.client.get("/api/3/action/resource_show", json={'id': resources[index_resource]["id"]})
-    
-    @task
-    def get_resource_page(self):
-        datasets = ImportData.get_datasets()
-        if datasets != -1:
-            index_dataset = random.randint(0, len(datasets) - 1)
-            resources = ImportData.get_resources(datasets[index_dataset]["id"])
-            index_resource = random.randint(0, len(resources) - 1)
-            self.client.get("/dataset/" + datasets[index_dataset]["name"] + "/resource/" + resources[index_resource]["id"])
+    @task(5)
+    def get_datasets(self):
+        self.client.get("/api/3/action/current_package_list_with_resources")
 
-    @task
+    @task(4)
     def get_dataset(self):
         datasets = ImportData.get_datasets()
         if datasets != -1:
             index = random.randint(0, len(datasets) - 1)
-            self.client.get("/dataset/" + datasets[index]["name"])
+            self.client.get("/api/3/action/package_show", json={'id': datasets[index]["name"]})
 
-    @task
-    def get_datasets(self):
-        self.client.get("/dataset")
+    @task(3)
+    def get_resource(self):
+        datasets = ImportData.get_datasets()
+        if datasets != -1:
+            index_dataset = random.randint(0, len(datasets) - 1)
+            resources = ImportData.get_resources(datasets[index_dataset]["id"])
+            if resources != -1:
+                index_resource = random.randint(0, len(resources) - 1)
+                self.client.get("/api/3/action/resource_show", json={'id': resources[index_resource]["id"]})
 
-    @task
+    @task(1)
     def get_groups(self):
-        self.client.get("/group")
+        self.client.get("/api/3/action/group_list")
 
-    @task
+    @task(1)
     def get_organizations(self):
-        self.client.get("/organization")
+        self.client.get("/api/3/action/organization_list")
 
-    @task
+    @task(2)
     def post_resource(self):
         dataset_folder, resource_name, type_of = ImportData.pick_random()
         existence = ImportData.exists(dataset_folder, resource_name)
