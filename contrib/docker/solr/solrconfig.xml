@@ -290,7 +290,7 @@
 	
 	<schemaFactory class="ManagedIndexSchemaFactory">
 		<bool name="mutable">true</bool>
-	</schemaFactory>
+	</schemaFactory> 
 	
 	<updateRequestProcessorChain name="add-unknown-fields-to-the-schema">
 		<processor class="solr.UUIDUpdateProcessorFactory" />

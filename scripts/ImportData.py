@@ -1,119 +1,114 @@
 #!/usr/bin/env python
 import os
 import pprint
-api_url = 'http://dockerhost:5000/api/3/action/'
-txt_dataset_folder = '/home/ruizinho/Desktop/Universidade/Tese/gsd/SAIL_SD_GNSS_NMEA'
-csv_dataset_folder = '/home/ruizinho/Desktop/Universidade/Tese/gsd/preprocessed'
-
-# HEADERS #
-
 import pathlib
+import random
 import requests
+import ConvertData
 
 # AUX INFO #
 
+api_url = 'http://dockerhost:5000/api/3/action/'
+nmea_dataset_folder = '/home/rno110/gsd/SAIL_SD_GNSS_NMEA'
+gnss_dataset_folder = '/home/rno110/SAIL_SHIP_NS/SAIL_SD_GNSS_20200214'
+csv_dataset_folder = '/home/rno110/gsd/SAIL_PD_CSV'
 api_token_local = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE2NDg2MDI0OTUsImp0aSI6IkYza2k1eWZfZ0JWQTdENG5nOXNKSXh5SW9wSzk1SmowS1g0ckNCR1U0bGloRy1FcGRuYUpRYW5kME5GLXA5Ql9qd2FMUEtfWV8xckg5N0lpIn0.mvGhowtnwa2eIB-IfVLVky18coMWvZHh9Fsb66vNZcs'
 api_token_docker = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'
 header = {
     "X-CKAN-API-Key": api_token_docker,
 }
+csv_description = """###### This dataset contains CSV files with information about
+- Gama radiation (GA)
+- Atmospheric electric field (E1 and E2)
+- Visibility (VI)
+- Solar radiation (inSL and outSL)
+"""
+nmea_description = "###### This dataset contains GNSS_NMEA_yyyymmdd_hh files (where yyyy is the year, mm the month, dd the day, and HH the hour), each including the hourly logs from the antennas composign the GNSS system, in the NMEA (National Marine Electronics Association) standard format."
+gnss_description = """###### This dataset contains GNSS_type_yyyyymmdd__hh files (where type is the resource format, yyyy is the year, mm the month, dd the day, and HH the hour), each including the hourly logs from the antennas composing the GNSS system, in different formats:
+- binary format (described in Novatel OEM4 Volume 2 Command and Log Reference User manual)
+- RAWIMUX format (IMU data extended log for post-processing)
+###### There is also another format for representing the GNSS system, the best known, NMEA (National Marine Electronics Association), but this is available in individual datasets.
+"""
+csv_title = "Structured atmospheric measurements of the SAIL campaign"
+nmea_title = "Raw NMEA measurements of the SAIL campaign"
+gnss_title = "Raw GNSS measurements of the SAIL campaign"
 
 
-# DATA #
+# DATA OBJECTS #
 
-# Dataset to update (files .txt)
-def up_data_txt(folder_path, file_name, file_type):
+# Metadata to update dataset
+def up_data(folder_path, file_name, file_type):
     folder_name = (folder_path.rpartition('/')[-1]).lower()
     data = {
         "match__name": folder_name,
-        "update__resources__extend": '[{"name": "' + file_name + ' ", "format": "' + file_type + '"}]'
+        "update__resources__extend": '[{"name": "' + file_name + ' "}]' if file_type == "csv" else '[{"name": "' + file_name + ' ", "format": "txt"}]'
     }
     return data
 
 
-def up_data_csv(folder_path, file_name):
+# Metadata to create dataset
+def new_data(folder_path, type_of):
     folder_name = (folder_path.rpartition('/')[-1]).lower()
+    if type_of == "gnss" or type_of == "nmea":
+        date = folder_path.rpartition('/')[-1].split("_")[-1]
     data = {
-        "match__name": folder_name,
-        "update__resources__extend": '[{"name": "' + file_name + ' "}]'
+        "name": folder_name,
+        "notes": csv_description if type_of == "csv" else nmea_description if type_of == "nmea" else gnss_description,
+        "title": csv_title if type_of == "csv" else nmea_title + " (" + date[:4] + "/" + date[4:6] + "/" + date[
+                                                                                                          6:] + ")" if type_of == "nmea" else gnss_title + " (" + date[
+                                                                                                                                                                  :4] + "/" + date[
+                                                                                                                                                                              4:6] + "/" + date[
+                                                                                                                                                                                           6:] + ")",
+        "private": False,
+        "tags": [{"name": "research"}],
+        "owner_org": "inesctec",
+        "groups": [{"name": "sail-project"}],
+        "extras": [{"key": "year", "value":date[:4]}, {"key": "month", "value": date[4:6]}, {"key": "day", "value": date[6:]}] if type_of != "csv" else []
     }
     return data
 
-
-def new_data_txt(folder_path):
+# Metadata to add spatial field
+def add_spatial_data(folder_path, type_of, coordinates):
     folder_name = (folder_path.rpartition('/')[-1]).lower()
     data = {
         "name": folder_name,
-        "notes": "This dataset contains GNSS_NMEA_yyyymmdd_hh files (where yyyy is the year, mm the month, dd the day, and HH the hour), each including the hourly logs from the antennas composign the GNSS system, in the NMEA (National Marine Electronics Association) standard format.",
-        "title": "SAIL Project - GNSS_NMEA_" + folder_name.rpartition('_')[-1],
+        "notes": csv_description if type_of == "csv" else nmea_description if type_of == "nmea" else gnss_description,
+        "title": csv_title if type_of == "csv" else nmea_title + " (" + date[:4] + "/" + date[4:6] + "/" + date[
+                                                                                                          6:] + ")" if type_of == "nmea" else gnss_title + " (" + date[
+
+                                            :4] + "/" + date[
+
+                                                        4:6] + "/" + date[
+                                                                                                                                                                                           6:] + ")",
         "private": False,
         "tags": [{"name": "research"}],
         "owner_org": "inesctec",
-        "groups": [{"name": "sail-project"}]
+        "groups": [{"name": "sail-project"}],
+        "extras": [{"key":"spatial","value":'{"type":"Polygon","coordinates":' + coordinates + '}'}]
     }
     return data
 
 
-def new_data_csv(dataset_name):
-    dataset_name_lower = dataset_name.lower()
-    data = {
-        "name": dataset_name_lower,
-        "notes": "This dataset contains CSV files with information about stuff like gamma or solar radiation",
-        "title": "SAIL Project - " + dataset_name.split("_", 1)[1],
-        "private": False,
-        "tags": [{"name": "research"}],
-        "owner_org": "inesctec",
-        "groups": [{"name": "sail-project"}]
-    }
-    return data
 
-
-# REQUEST FUNCTIONS #
-
-# Update multiple datasets
-def import_txt_datasets():
-    for root, dirs, files in os.walk(txt_dataset_folder):
-        if root != txt_dataset_folder:
-            create_dataset(root, "txt")
-            for name in files:
-                update_dataset(root, name, "txt")
-
-
-def import_csv_datasets():
-    for root, dirs, files in os.walk(csv_dataset_folder):
-        create_dataset("SAIL_PD_CSV", "csv")
-        for name in files:
-            update_dataset(root, name, "csv")
-
+# POST REQUESTS #
 
 # Create new dataset
 def create_dataset(folder_path, type_of):
-    if type_of == 'csv':
-        create_request = requests.post(api_url + 'package_create', json=new_data_csv(folder_path), headers=header)
-    else:
-        create_request = requests.post(api_url + 'package_create', json=new_data_txt(folder_path), headers=header)
+    create_request = requests.post(api_url + 'package_create', json=new_data(folder_path, type_of), headers=header)
     print(create_request.json())
     assert create_request.ok
     assert create_request.json()["success"]
     pprint.pprint(create_request.json()["result"])
 
 
-# Update specific dataset
+# Update specific dataset with new resource
 def update_dataset(folder_path, file_name, type_of):
     filepath = pathlib.Path(os.path.join(folder_path, file_name))
     fd = filepath.open("rb")
-    if type_of == "csv":
-        update_request = requests.post(api_url + 'package_revise', data=up_data_csv("sail_pd_csv", file_name),
-                                       files=[("update__resources__-1__upload", (file_name, fd))],
-                                       headers=header)
-    else:
-        aux, file_type = os.path.splitext(os.path.join(folder_path, file_name))
-        if not file_type:
-            file_type = "txt"
-        update_request = requests.post(api_url + 'package_revise',
-                                       data=up_data_txt(folder_path, file_name, file_type),
-                                       files=[("update__resources__-1__upload", (file_name, fd))],
-                                       headers=header)
+    update_request = requests.post(api_url + 'package_revise',
+                                   data=up_data(folder_path, file_name, type_of),
+                                   files=[("update__resources__-1__upload", (file_name, fd))],
+                                   headers=header)
     print(update_request.json())
     assert update_request.ok
     assert update_request.json()["success"]
@@ -144,16 +139,121 @@ def push_resource(resource):
     pprint.pprint(push_request.json()["success"])
 
 
+# GET REQUESTS #
+
 # Return the metadata of a resource
-def get_resource():
-    get_request = requests.get(api_url + 'resource_show', {'id': 'bd005382-204c-44ad-8160-e4d99bdfc663'})
+def get_resource(resource_id):
+    get_request = requests.get(api_url + 'resource_show', json={'id': resource_id})
     assert get_request.ok
     assert get_request.json()["success"]
-    pprint.pprint(get_request.json()["result"])
+    # pprint.pprint(get_request.json()["result"])
+    return get_request.json()["result"]
 
+
+# Return the resources of a dataset
+def get_resources(dataset_name):
+    get_request = requests.get(api_url + 'package_show', json={'id': dataset_name})
+    if get_request.json()["success"]:
+        return get_request.json()["result"]["resources"]
+    else:
+        return -1
+
+
+# Return a list of the site’s datasets (packages) and their resources.
+def get_dataset_names():
+    get_request = requests.get(api_url + 'package_list', json={'limit': 100})
+    assert get_request.ok
+    assert get_request.json()["success"]
+    if get_request.json()["result"]:
+        return get_request.json()["result"]
+    else:
+        return -1
+
+
+# Return a list of the site’s datasets (packages) and their resources.
+def get_datasets():
+    get_request = requests.get(api_url + 'current_package_list_with_resources', json={'limit': 100})
+    assert get_request.ok
+    assert get_request.json()["success"]
+    if get_request.json()["result"]:
+        return get_request.json()["result"]
+    else:
+        return -1
+
+# Delete dataset
+def delete_datasets(dataset_names):
+    for dataset_name in dataset_names:
+       requests.post(api_url + 'package_delete', json={'id': dataset_name},headers=header)
+
+
+# Import datasets
+def import_nmea_datasets():
+    root, dirs, empty = next(os.walk(nmea_dataset_folder))
+    type_of = "nmea"
+   # r = 0
+   # d = 0
+    for dir_aux in dirs:
+        dataset_folder_path = os.path.join(root, dir_aux)
+        json_data = new_data(dataset_folder_path, type_of)
+        requests.post(api_url + "package_create", json=json_data,
+                         headers={
+                             'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+        resources = next(os.walk(dataset_folder_path))[2]
+         #r = 0
+        for resource_name in resources:
+            json_data = up_data(dataset_folder_path, resource_name, type_of)
+            filepath = pathlib.Path(os.path.join(dataset_folder_path, resource_name))
+            fd = filepath.open("rb")
+            update_request = requests.post(api_url + "package_revise", data=json_data,
+                                              files=[("update__resources__-1__upload", (resource_name, fd))],
+                                              headers={
+                                                  'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+            new_resource = update_request.json()["result"]["package"]["resources"][-1]
+            requests.post(api_url + "resource_create_default_resource_views",
+                             json={"resource": new_resource},
+                             headers={
+                                 'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+            requests.post(api_url + "datastore_create",
+                             json={"resource": new_resource},
+                             headers={
+                                 'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+           # r += 1
+           # if r > 10:
+            #    break
+       # d += 1
+       # if d > 20:
+        #    break   
+
+def import_other_datasets():
+    root, empty, resources = next(os.walk(csv_dataset_folder))
+    type_of = "csv"
+    dataset_folder_path = root
+    coordinates = ConvertData.choose_bbox()
+    json_data = add_spatial_data(dataset_folder_path, type_of, coordinates)
+    requests.post(api_url + "package_create", json=json_data,
+                  headers={
+                      'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+    resources = next(os.walk(dataset_folder_path))[2]
+    r = 0
+    for resource_name in resources:
+        json_data = up_data(dataset_folder_path, resource_name, type_of)
+        filepath = pathlib.Path(os.path.join(dataset_folder_path, resource_name))
+        fd = filepath.open("rb")
+        update_request = requests.post(api_url + "package_revise", data=json_data,
+                                       files=[("update__resources__-1__upload", (resource_name, fd))],
+                                       headers={
+                                           'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+        new_resource = update_request.json()["result"]["package"]["resources"][-1]
+        requests.post(api_url + "resource_create_default_resource_views",
+                      json={"resource": new_resource},
+                      headers={
+                          'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+        requests.post(api_url + "datastore_create",
+                      json={"resource": new_resource},
+                      headers={
+                          'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
 
 # MAIN #
 
-import_csv_datasets()
-# import_txt_datasets()
-# get_resource()
+# import_datasets(csv_dataset_folder)
+# import_datasets(txt_dataset_folder)

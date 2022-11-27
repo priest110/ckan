@@ -70,7 +70,9 @@ services:
 
   solr:
     container_name: solr
-    image: docker_solr
+    build:
+      context: ../../
+      dockerfile: contrib/docker/solr/Dockerfile
     volumes:
       - solr_data:/opt/solr/server/solr/ckan/data
     restart: unless-stopped
