@@ -4,9 +4,6 @@ import sys
 
 # AUX INFO #
 
-dataset_folder = '/home/rno110/gsd/SAIL_PD_CSV/'
-files = os.listdir(dataset_folder)
-
 max_longitude = -180
 min_longitude = 180
 max_latitude = -90
@@ -26,9 +23,9 @@ def convert_to_csv():
         file_to_read.close()
         file_to_write.close()
 
-
-def choose_bbox():
+def choose_bbox(dataset_folder_path):
     global max_latitude, min_latitude, max_longitude, min_longitude
+    files = os.listdir(dataset_folder_path)
     for file_name in files:
         filepath = os.path.join(dataset_folder, file_name)
         with open(filepath, 'r') as file:

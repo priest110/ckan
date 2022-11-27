@@ -9,13 +9,12 @@ import ConvertData
 # AUX INFO #
 
 api_url = 'http://dockerhost:5000/api/3/action/'
-nmea_dataset_folder = '/home/rno110/gsd/SAIL_SD_GNSS_NMEA'
-gnss_dataset_folder = '/home/rno110/SAIL_SHIP_NS/SAIL_SD_GNSS_20200214'
-csv_dataset_folder = '/home/rno110/gsd/SAIL_PD_CSV'
-api_token_local = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE2NDg2MDI0OTUsImp0aSI6IkYza2k1eWZfZ0JWQTdENG5nOXNKSXh5SW9wSzk1SmowS1g0ckNCR1U0bGloRy1FcGRuYUpRYW5kME5GLXA5Ql9qd2FMUEtfWV8xckg5N0lpIn0.mvGhowtnwa2eIB-IfVLVky18coMWvZHh9Fsb66vNZcs'
-api_token_docker = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'
+nmea_dataset_folder = '/path/to/SAIL_SD_GNSS_NMEA'
+gnss_dataset_folder = '/path/to/SAIL_SHIP_NS'
+csv_dataset_folder = '/path/to/SAIL_PD_CSV'
+api_token = 'api_token'
 header = {
-    "X-CKAN-API-Key": api_token_docker,
+    "X-CKAN-API-Key": api_token,
 }
 csv_description = """###### This dataset contains CSV files with information about
 - Gama radiation (GA)
@@ -67,7 +66,7 @@ def new_data(folder_path, type_of):
     }
     return data
 
-# Metadata to add spatial field
+# Metadata with spatial field
 def add_spatial_data(folder_path, type_of, coordinates):
     folder_name = (folder_path.rpartition('/')[-1]).lower()
     data = {
@@ -84,7 +83,7 @@ def add_spatial_data(folder_path, type_of, coordinates):
         "tags": [{"name": "research"}],
         "owner_org": "inesctec",
         "groups": [{"name": "sail-project"}],
-        "extras": [{"key":"spatial","value":'{"type":"Polygon","coordinates":' + coordinates + '}'}]
+        "extras": [{"key": "year", "value":date[:4]}, {"key": "month", "value": date[4:6]}, {"key": "day", "value": date[6:]}] if type_of != "csv" else [{"key": "year", "value":date[:4]}, {"key": "month", "value": date[4:6]}, {"key": "day", "value": date[6:]}, {"key":"spatial","value":'{"type":"Polygon","coordinates":' + coordinates + '}'}]
     }
     return data
 
@@ -146,7 +145,6 @@ def get_resource(resource_id):
     get_request = requests.get(api_url + 'resource_show', json={'id': resource_id})
     assert get_request.ok
     assert get_request.json()["success"]
-    # pprint.pprint(get_request.json()["result"])
     return get_request.json()["result"]
 
 
@@ -187,19 +185,26 @@ def delete_datasets(dataset_names):
 
 
 # Import datasets
-def import_nmea_datasets():
-    root, dirs, empty = next(os.walk(nmea_dataset_folder))
-    type_of = "nmea"
-   # r = 0
-   # d = 0
+def import_datasets(type_of):
+    if type_of == "nmea":
+        root, dirs, empty = next(os.walk(nmea_dataset_folder))
+    else if type_of == "gnss":
+        root, dirs, empty = next(os.walk(gnss_dataset_folder)) 
+    else:
+        root, empty, empty = next(os.walk(csv_dataset_folder))
+
     for dir_aux in dirs:
-        dataset_folder_path = os.path.join(root, dir_aux)
-        json_data = new_data(dataset_folder_path, type_of)
+        if type_of != "csv":
+            dataset_folder_path = os.path.join(root, dir_aux)
+            json_data = new_data(dataset_folder_path, type_of)
+        else:
+            dataset_folder_path = os.path.join(root, dir_aux)
+            coordinates = ConvertData.choose_bbox(dataset_folder_path)
+            json_data = add_spatial_data(dataset_folder_path, type_of, coordinates)
         requests.post(api_url + "package_create", json=json_data,
                          headers={
-                             'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+                             'Authorization': api_token})
         resources = next(os.walk(dataset_folder_path))[2]
-         #r = 0
         for resource_name in resources:
             json_data = up_data(dataset_folder_path, resource_name, type_of)
             filepath = pathlib.Path(os.path.join(dataset_folder_path, resource_name))
@@ -207,53 +212,13 @@ def import_nmea_datasets():
             update_request = requests.post(api_url + "package_revise", data=json_data,
                                               files=[("update__resources__-1__upload", (resource_name, fd))],
                                               headers={
-                                                  'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+                                                  'Authorization': api_token})
             new_resource = update_request.json()["result"]["package"]["resources"][-1]
             requests.post(api_url + "resource_create_default_resource_views",
                              json={"resource": new_resource},
                              headers={
-                                 'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
+                                 'Authorization': api_token})
             requests.post(api_url + "datastore_create",
                              json={"resource": new_resource},
                              headers={
-                                 'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
-           # r += 1
-           # if r > 10:
-            #    break
-       # d += 1
-       # if d > 20:
-        #    break   
-
-def import_other_datasets():
-    root, empty, resources = next(os.walk(csv_dataset_folder))
-    type_of = "csv"
-    dataset_folder_path = root
-    coordinates = ConvertData.choose_bbox()
-    json_data = add_spatial_data(dataset_folder_path, type_of, coordinates)
-    requests.post(api_url + "package_create", json=json_data,
-                  headers={
-                      'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
-    resources = next(os.walk(dataset_folder_path))[2]
-    r = 0
-    for resource_name in resources:
-        json_data = up_data(dataset_folder_path, resource_name, type_of)
-        filepath = pathlib.Path(os.path.join(dataset_folder_path, resource_name))
-        fd = filepath.open("rb")
-        update_request = requests.post(api_url + "package_revise", data=json_data,
-                                       files=[("update__resources__-1__upload", (resource_name, fd))],
-                                       headers={
-                                           'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
-        new_resource = update_request.json()["result"]["package"]["resources"][-1]
-        requests.post(api_url + "resource_create_default_resource_views",
-                      json={"resource": new_resource},
-                      headers={
-                          'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
-        requests.post(api_url + "datastore_create",
-                      json={"resource": new_resource},
-                      headers={
-                          'Authorization': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzcEdpUnhpR2I1NDg0V3BhRTVOMUl6eDN2VTlyWWozTUc1OExaRThubG1NIiwiaWF0IjoxNjUzNzkyNzEwfQ.UCY6CAYTYrv1mxGdE725k8nvDm4JxYmUP5XithQXDxI'})
-
-# MAIN #
-
-# import_datasets(csv_dataset_folder)
-# import_datasets(txt_dataset_folder)
+                                 'Authorization': api_token})
