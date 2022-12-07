@@ -30,73 +30,71 @@ system that provides a powerful platform for cataloging, storing and accessing
 datasets with a rich front-end, full API (for both data and catalog), visualization
 tools and more. Read more at `ckan.org <http://ckan.org/>`_.
 
-
-Installation
+Installation and Deployment
 ------------
 
-See the `CKAN Documentation <http://docs.ckan.org>`_ for installation instructions.
+For the installation of the system it is necessary to meet certain prerequisites, which
+are listed below:
 
+- Unrestricted access to external domains, such as GitHub or DockerHub
+- Have docker, docker-compose and git installed
 
-Support
--------
-If you need help with CKAN or want to ask a question, use either the
-`ckan-dev`_ mailing list, the `CKAN chat on Gitter`_, or the `CKAN tag on Stack Overflow`_ (try
-searching the Stack Overflow and ckan-dev `archives`_ for an answer to your
-question first).
+Once the prerequisites listed above are met, you need to download the software as well
+as some custom images to run certain docker containers. For this, you need to run the
+following commands:
 
-If you've found a bug in CKAN, open a new issue on CKAN's `GitHub Issues`_ (try
-searching first to see if there's already an issue for your bug).
+- Clone CKAN into a directory of choice:
 
-If you find a potential security vulnerability please email security@ckan.org,
-rather than creating a public issue on GitHub.
+```
+cd /path/to/directory
+git clone https://github.com/priest110/ckan.git
+```
 
-.. _CKAN tag on Stack Overflow: http://stackoverflow.com/questions/tagged/ckan
-.. _archives: https://groups.google.com/a/ckan.org/g/ckan-dev
-.. _GitHub Issues: https://github.com/ckan/ckan/issues
-.. _CKAN chat on Gitter: https://gitter.im/ckan/chat
+- Pull the required docker images from the DockerHub:
 
+```
+docker pull priest110/docker_db:1.0.0
+docker pull priest110/docker_ckan:1.0.0
+```
 
-Contributing to CKAN
---------------------
+Reaching this point, you have a working system, however, the Docker installation has a
+problem regarding the recognition of localhost as a valid address (where the main service
+CKAN is running) for other services, in this case for the Datapusher, which makes it
+impossible to run well. As such, some changes need to be made to the hosts file:
 
-For contributing to CKAN or its documentation, see
-`CONTRIBUTING <https://github.com/ckan/ckan/blob/master/CONTRIBUTING.md>`_.
+1. First, find the IP 0f the docker0 bridge:
 
-Mailing List
-~~~~~~~~~~~~
+```
+ip addr show | grep docker0
+```
 
-Subscribe to the `ckan-dev`_ mailing list to receive news about upcoming releases and
-future plans as well as questions and discussions about CKAN development, deployment, etc.
+2. An example of the possible output:
 
-Community Chat
-~~~~~~~~~~~~~~
+```
+10: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state
+DOWN group default
+inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0:
+```
 
-If you want to talk about CKAN development say hi to the CKAN developers and members of
-the CKAN community on the public `CKAN chat on Gitter`_. Gitter is free and open-source;
-you can sign in with your GitHub, GitLab, or Twitter account.
+3. Next, you can then edit /etc/hosts/ file:
 
-The logs for the old `#ckan`_ IRC channel (2014 to 2018) can be found here:
-https://github.com/ckan/irc-logs.
+```
+172.17.0.1 dockerhost
+```
 
-Wiki
-~~~~
+4. Restart the Docker daemon:
 
-If you've figured out how to do something with CKAN and want to document it for
-others, make a new page on the `CKAN wiki`_ and tell us about it on the
-ckan-dev mailing list or on Gitter.
+```
+sudo service docker restart
+```
 
-.. _ckan-dev: https://groups.google.com/a/ckan.org/forum/#!forum/ckan-dev
-.. _#ckan: http://webchat.freenode.net/?channels=ckan
-.. _CKAN Wiki: https://github.com/ckan/ckan/wiki
-.. _CKAN chat on Gitter: https://gitter.im/ckan/chat
+5. Run:
 
+```
+docker-compose -f docker-compose.yml -f docker-compose.override.yml up -d
+```
 
-Copying and License
--------------------
+After this, you have all the services working well, just navigate to http://dockerhost:5000
+and explore.
 
-This material is copyright (c) 2006-2018 Open Knowledge Foundation and contributors.
-
-It is open and licensed under the GNU Affero General Public License (AGPL) v3.0
-whose full text may be found at:
-
-http://www.fsf.org/licensing/licenses/agpl-3.0.html
+If you want full access to the platform I developed, such as the CKAN's extensions added to the software and other configurations, you need to contact me because the docker volumes that have that information are on a local server.
